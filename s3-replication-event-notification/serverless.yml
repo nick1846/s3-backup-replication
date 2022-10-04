@@ -1,0 +1,120 @@
+service: s3-event-notification
+
+frameworkVersion: '3'
+
+plugins:
+  - serverless-plugin-datadog
+
+custom:
+  datadog:
+    site: datadoghq.com
+    apiKeySecretArn: ${ssm:/DevTools/SecretsManager/DDApiSecretArn} #The API key the same as for crm-lambdas-staging 
+
+provider:
+  name: aws
+  runtime: python3.8
+  iam:
+    role:
+      name: ${sls:stage}-S3ReplicationEventLambdaRole
+      statements:
+        - Effect: Allow
+          Action:
+            - 'ec2:CreateNetworkInterface'
+            - 'ec2:DescribeNetworkInterfaces'
+            - 'ec2:DeleteNetworkInterface'
+            - 'secretsmanager:GetSecretValue'
+          Resource: '*'
+
+functions:
+  s3EventNotification:
+    handler: handler.s3ReplicationEvent
+
+resources: 
+  Resources:
+    S3BucketReplicationRole: 
+      Type: "AWS::IAM::Role"
+      Properties:
+        RoleName: ${sls:stage}-s3BucketReplicationRole
+        AssumeRolePolicyDocument: 
+          Version: "2012-10-17"
+          Statement: 
+            - Effect: "Allow"
+              Principal: 
+                Service: 
+                  - "s3.amazonaws.com"
+              Action: 
+                - "sts:AssumeRole"
+        Path: "/service-role/"
+    S3BucketReplicationPolicy: 
+      Type: "AWS::IAM::Policy"
+      Properties: 
+        PolicyName: ${sls:stage}-s3BucketReplicationPolicy
+        PolicyDocument: 
+          Version: "2012-10-17"
+          Statement: 
+            - Effect: "Allow"
+              Action:
+                - "s3:GetReplicationConfiguration"
+                - "s3:ListBucket"
+              Resource:
+                - "arn:aws:s3:::nomad-credit-mydocs-staging"
+            - Effect: "Allow"
+              Action:
+                - "s3:GetObjectVersionForReplication"
+                - "s3:GetObjectVersionAcl"
+                - "s3:GetObjectVersionTagging"
+              Resource:
+                - "arn:aws:s3:::nomad-credit-mydocs-staging/*"
+            - Effect: "Allow"
+              Action:
+                - "s3:GetObjectVersionForReplication"
+                - "s3:GetObjectVersionAcl"
+                - "s3:GetObjectVersionTagging"
+              Resource:
+                - "arn:aws:s3:::nomad-credit-mydocs-staging/*"
+        Roles: 
+        - Ref: S3BucketReplicationRole
+
+    S3BatchOperationRole: 
+      Type: "AWS::IAM::Role"
+      Properties:
+        RoleName: ${sls:stage}-S3BatchOperationRole
+        AssumeRolePolicyDocument: 
+          Version: "2012-10-17"
+          Statement: 
+            - Effect: "Allow"
+              Principal: 
+                Service: 
+                  - "batchoperations.s3.amazonaws.com"
+              Action: 
+                - "sts:AssumeRole"
+    S3BatchOperationPolicy: 
+      Type: "AWS::IAM::Policy"
+      Properties: 
+        PolicyName: ${sls:stage}-S3BatchOperationPolicy
+        PolicyDocument: 
+          Version: "2012-10-17"
+          Statement: 
+            - Effect: "Allow"
+              Action:
+                - "s3:InitiateReplication"
+              Resource:
+                - "arn:aws:s3:::nomad-credit-mydocs-staging/*"
+            - Effect: "Allow"
+              Action:
+                - "s3:GetReplicationConfiguration"
+                - "s3:PutInventoryConfiguration"
+              Resource:
+                - "arn:aws:s3:::nomad-credit-mydocs-staging"
+            - Effect: "Allow"
+              Action:
+                - "s3:GetObject"
+                - "s3:GetObjectVersion"
+                - "s3:PutObject"
+              Resource:
+                - "arn:aws:s3:::reports-s3backup-nomad-stg/*"
+        Roles: 
+        - Ref: S3BucketReplicationRole
+
+        
+    
